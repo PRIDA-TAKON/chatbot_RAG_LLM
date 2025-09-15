@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 import torch
@@ -12,7 +11,7 @@ import os
 
 # --- Configuration ---
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-FAISS_INDEX_PATH = "faiss_index"
+FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "faiss_index") # Use environment variable or default
 LLM_MODEL_NAME = "google/flan-t5-small"
 
 # --- Pydantic Models for API ---
@@ -25,14 +24,13 @@ class QueryResponse(BaseModel):
 
 # --- Global Variables ---
 app = FastAPI(title="RAG Chatbot API")
-qa_chain = None
 
 # --- Model Loading and Setup ---
 @app.on_event("startup")
 def startup_event():
     """This function runs when the API starts up. It loads all necessary models and sets up the QA chain."""
     global qa_chain
-    print("--- API Startup: Loading models and setting up QA chain... ---")
+    print("--- API Startup: Loading models and setting up QA chain...")
 
     # 1. Load Embeddings and Vector Store
     print(f"Loading embedding model: {EMBEDDING_MODEL_NAME}")
@@ -98,3 +96,7 @@ def process_query(request: QueryRequest):
 
 # To run this API locally for testing:
 # uvicorn backend_api:app --reload
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
