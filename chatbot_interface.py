@@ -1,9 +1,10 @@
+
 import streamlit as st
 import os
 import torch
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain_community.llms import HuggingFacePipeline
@@ -11,9 +12,9 @@ from langchain_community.llms import HuggingFacePipeline
 # --- Configuration ---
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 FAISS_INDEX_PATH = "faiss_index"
-LLM_MODEL_NAME = "google/gemma-2b-it"
+# Switched to a much smaller model to fit in Streamlit's free tier memory
+LLM_MODEL_NAME = "google/flan-t5-small" 
 
-# Use Streamlit's caching to load the model and retriever only once.
 @st.cache_resource
 def setup_chatbot():
     """
@@ -25,54 +26,36 @@ def setup_chatbot():
 
     st.write(f"Loading FAISS index from {FAISS_INDEX_PATH}...")
     if not os.path.exists(FAISS_INDEX_PATH):
-        st.error(f"Error: FAISS index not found at {FAISS_INDEX_PATH}. Please run rag_pipeline.py first.")
+        st.error(f"Error: FAISS index not found at {FAISS_INDEX_PATH}. Please ensure it's in the GitHub repository.")
         return None
     
-    # allow_dangerous_deserialization is needed for FAISS with langchain.
     vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings, allow_dangerous_deserialization=True)
     retriever = vector_store.as_retriever()
 
     st.write(f"Loading LLM: {LLM_MODEL_NAME}...")
     
-    # Configure quantization for memory efficiency
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-    )
-
-    # Load the model and tokenizer
+    # Load the model and tokenizer for a Seq2Seq model like T5
     tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(
-        LLM_MODEL_NAME,
-        quantization_config=bnb_config,
-        device_map="auto" # Automatically select device (CPU/GPU)
-    )
+    model = AutoModelForSeq2SeqLM.from_pretrained(LLM_MODEL_NAME)
 
-    # Create a text generation pipeline
+    # Create a text2text-generation pipeline suitable for T5 models
     pipe = pipeline(
-        "text-generation",
+        "text2text-generation",
         model=model,
         tokenizer=tokenizer,
-        max_new_tokens=512,
-        do_sample=True,
-        temperature=0.7,
-        top_k=50,
-        top_p=0.95,
-        repetition_penalty=1.15
+        max_new_tokens=512
     )
 
     llm = HuggingFacePipeline(pipeline=pipe)
 
     # Define the prompt template
-    template = '''ใช้ข้อมูลบริบทต่อไปนี้เพื่อตอบคำถามที่ส่วนท้าย
-    หากคุณไม่ทราบคำตอบ ให้บอกว่าคุณไม่ทราบ อย่าพยายามสร้างคำตอบขึ้นมาเอง
+    template = '''Use the following context to answer the question at the end.
+    If you don't know the answer, just say that you don't know, don't try to make up an answer.
 
-    {context}
+    Context: {context}
 
-    คำถาม: {question}
-    คำตอบ:'''
+    Question: {question}
+    Answer:'''
     prompt_template = PromptTemplate.from_template(template)
 
     st.write("Setting up RAG chain...")
@@ -89,8 +72,8 @@ def setup_chatbot():
 
 # --- Streamlit UI ---
 
-st.title("🤖 Chatbot RAG with Gemma-2B")
-st.caption("ถาม-ตอบข้อมูลจากไฟล์เอกสารของคุณ")
+st.title("🤖 Chatbot RAG")
+st.caption(f"Powered by {LLM_MODEL_NAME}")
 
 # Load the QA chain
 qa_chain = setup_chatbot()
@@ -107,7 +90,6 @@ if qa_chain:
 
     # Get user input
     if prompt := st.chat_input("คำถามของคุณ..."):
-        # Add user message to history and display it
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
@@ -119,11 +101,10 @@ if qa_chain:
                     response = qa_chain.invoke({"query": prompt})
                     result = response.get('result', "ขออภัย ผมไม่สามารถหาคำตอบได้ในขณะนี้")
                     st.write(result)
-                    # Add assistant response to history
                     st.session_state.messages.append({"role": "assistant", "content": result})
                 except Exception as e:
                     error_message = f"เกิดข้อผิดพลาด: {e}"
                     st.error(error_message)
                     st.session_state.messages.append({"role": "assistant", "content": error_message})
 else:
-    st.warning("ไม่สามารถเริ่มต้น Chatbot ได้ กรุณาตรวจสอบว่าคุณได้รัน `rag_pipeline.py` เพื่อสร้าง index แล้ว")
+    st.warning("ไม่สามารถเริ่มต้น Chatbot ได้ กรุณาตรวจสอบ Log ด้านบน")
