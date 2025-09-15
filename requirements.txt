@@ -13,3 +13,5 @@ accelerate
 bitsandbytes
 torch
 streamlit
+fastapi
+uvicorn[standard]
