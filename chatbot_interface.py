@@ -6,7 +6,7 @@ import os
 # The URL of the backend API. 
 # When running locally, this will be http://localhost:8000
 # When deployed on AWS, you will need to replace this with your actual API Gateway URL.
-BACKEND_API_URL = os.getenv("BACKEND_API_URL", "https://your-huggingface-username-your-space-name.hf.space/query")
+BACKEND_API_URL = os.getenv("BACKEND_API_URL", "https://PRIDA-RAGLLM.hf.space")
 
 # --- Streamlit UI ---
 st.title("🤖 Chatbot RAG (Frontend)")
